@@ -7,6 +7,7 @@ from feed.serializers import *
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticatedOrReadOnly,IsAuthenticated
+from django.db import transaction
 
 class PostView(APIView):
     permission_classes = [IsAuthenticatedOrReadOnly]
@@ -208,12 +209,15 @@ class CommentView(APIView):
                 return Response(serializer.data, status=status.HTTP_200_OK)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         return Response({"message":"User not found"}, status=status.HTTP_400_BAD_REQUEST)
-        
 
 
     def delete(self, request, post_id, comment_id):
-        comment = Comment.objects.get(id=comment_id, feed_id=post_id)      
-        if comment.user == request.user:
-            comment.delete()
-            return Response({"message": "Comment deleted successfully"}, status=status.HTTP_200_OK)
+        with transaction.atomic():
+            comment = Comment.objects.get(id=comment_id, feed_id=post_id)
+            if comment.user == request.user:
+                comment.delete()
+                post = Post.objects.get(id=post_id)
+                post.total_comments = max(0, post.total_comments - 1)
+                post.save()
+                return Response({"message": "Comment deleted successfully"}, status=status.HTTP_200_OK)
         return Response({"message":"User not found"}, status=status.HTTP_400_BAD_REQUEST)

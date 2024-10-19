@@ -27,8 +27,19 @@ type PostSingleProps = {
   post: PostT;
 };
 
+type ActionBarProps = {
+  post: PostT;
+  totalComments: number;
+  updateTotalComment: (change: number) => void;
+};
+
 export default function PostSingle(props: PostSingleProps) {
   const { id, title, content } = props.post;
+  const [totalComments, setTotalComments] = useState(props.post.total_comments);
+
+  const updateTotalComment = (change: number) => {
+    setTotalComments(prev => prev + change);
+  };
 
   return (
     <div className="w-full rounded-xl border p-4 shadow-sm bg-white">
@@ -48,7 +59,8 @@ export default function PostSingle(props: PostSingleProps) {
         </div>
       </Link>
 
-      <ActionBar {...props} />
+      <ActionBar {...props} totalComments={totalComments}
+        updateTotalComment={updateTotalComment} />
     </div>
   );
 }
@@ -71,8 +83,8 @@ const PostHeader = ({ post }: PostSingleProps) => {
         title: 'Do you want to delete this post?',
         icon: <ExclamationCircleFilled />,
         content: 'This action cannot be undone.',
-        onOk() {},
-        onCancel() {},
+        onOk() { },
+        onCancel() { },
         centered: true,
         footer: () => (
           <div className="flex justify-end gap-3">
@@ -82,7 +94,7 @@ const PostHeader = ({ post }: PostSingleProps) => {
             >
               Cancel
             </Button>
-            <Button onClick={() => {}}>Yes, Delete</Button>
+            <Button onClick={() => { }}>Yes, Delete</Button>
           </div>
         ),
       });
@@ -115,17 +127,17 @@ const PostHeader = ({ post }: PostSingleProps) => {
             items: [
               ...(user?.id === author?.id
                 ? [
-                    {
-                      label: 'Edit Post',
-                      key: 'edit_post',
-                      icon: <CiEdit size={15} />,
-                    },
-                    {
-                      label: 'Delete Post',
-                      key: 'delete_post',
-                      icon: <MdDeleteOutline size={15} />,
-                    },
-                  ]
+                  {
+                    label: 'Edit Post',
+                    key: 'edit_post',
+                    icon: <CiEdit size={15} />,
+                  },
+                  {
+                    label: 'Delete Post',
+                    key: 'delete_post',
+                    icon: <MdDeleteOutline size={15} />,
+                  },
+                ]
                 : []),
               {
                 label: <span>Report Post</span>,
@@ -146,12 +158,12 @@ const PostHeader = ({ post }: PostSingleProps) => {
   );
 };
 
-const ActionBar = (props: PostSingleProps) => {
+const ActionBar = ({ post, totalComments, updateTotalComment }: ActionBarProps) => {
   const [isCommentBoxOpen, setIsCommentBoxOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const { user } = useSelector((state: RootState) => state.auth);
   const dispatch = useDispatch();
-  const { id, total_comments, share_count } = props.post;
+  const { id, share_count } = post;
 
   const onCommentClick = () => {
     if (user) {
@@ -164,13 +176,13 @@ const ActionBar = (props: PostSingleProps) => {
   return (
     <div>
       <div className="flex items-center gap-2.5 mt-3">
-        <Vote {...props.post} />
+        <Vote {...post} />
         <div
           className="bg-gray-100 hover:bg-gray-200 cursor-pointer h-8 px-2.5 rounded-full flex gap-1.5 items-center justify-center"
           onClick={onCommentClick}
         >
           <FaRegCommentAlt className="text-[15px] translate-y-[1px]" />
-          <p>{total_comments ?? 0}</p>
+          <p>{totalComments ?? 0}</p>
         </div>
         <div
           className="bg-gray-100 hover:bg-gray-200 cursor-pointer h-8 px-2.5 rounded-full flex gap-1.5 items-center justify-center"
@@ -181,7 +193,7 @@ const ActionBar = (props: PostSingleProps) => {
         </div>
       </div>
 
-      {isCommentBoxOpen ? <CommentBox post={props.post} /> : null}
+      {isCommentBoxOpen ? <CommentBox post={post} updateTotalComment={updateTotalComment} /> : null}
       <ShareModal
         open={isShareModalOpen}
         onCancel={() => setIsShareModalOpen(false)}

@@ -7,7 +7,7 @@ export const feedApi = createApi({
   baseQuery: axiosBaseQuery({
     baseUrl: import.meta.env.VITE_APP_BASE_URL as string,
   }),
-  tagTypes: ['Feed'],
+  tagTypes: ['Feed', 'Comments'],
   endpoints: (builder) => ({
     getPosts: builder.query<PostT[], any>({
       query: (params) => ({ url: '/feed/', method: 'get', params }),
@@ -50,6 +50,21 @@ export const feedApi = createApi({
         data,
       }),
     }),
+    updateComment: builder.mutation<CommentT, any>({
+      query: ({ postId, commentId, content }: any) => ({
+        url: `/feed/comment/${postId}/${commentId}`,
+        method: 'put',
+        data: { content },
+      }),
+      invalidatesTags: ['Comments'],
+    }),
+    deleteComment: builder.mutation({
+      query: ({ postId, commentId }) => ({
+        url: `/feed/comment/${postId}/${commentId}`,
+        method: 'delete',
+      }),
+      invalidatesTags: ['Comments'],
+    }),
   }),
 });
 
@@ -64,4 +79,6 @@ export const {
   useSubmitVoteMutation,
   useGetCommentsQuery,
   useSubmitCommentMutation,
+  useUpdateCommentMutation,
+  useDeleteCommentMutation,
 } = feedApi;

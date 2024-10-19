@@ -1,9 +1,17 @@
-import { Skeleton } from 'antd';
+import { Skeleton, Dropdown } from 'antd';
 import { useEffect, useRef, useState } from 'react';
+import { BsThreeDotsVertical } from 'react-icons/bs';
+import { CiEdit } from 'react-icons/ci';
 import { IoSend } from 'react-icons/io5';
+import { MdDeleteOutline, MdOutlineReport } from 'react-icons/md';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from 'store';
-import { useGetCommentsQuery, useSubmitCommentMutation } from 'store/api/feed';
+import {
+  useGetCommentsQuery,
+  useSubmitCommentMutation,
+  useUpdateCommentMutation,
+  useDeleteCommentMutation,
+} from 'store/api/feed';
 import { requireAuth } from 'store/prompt';
 import { CommentT, PostT } from 'types/feed';
 import { cn, getUserAvatar, getUserFullName } from 'utils';
@@ -11,42 +19,95 @@ import { cn, getUserAvatar, getUserFullName } from 'utils';
 type CommentBoxProps = {
   className?: string;
   post: PostT;
+  updateTotalComment: (change: number) => void;
 };
 
-export default function CommentBox({ className, post }: CommentBoxProps) {
+export default function CommentBox({ className, post, updateTotalComment }: CommentBoxProps,) {
   const [comments, setComments] = useState<CommentT[]>();
-  const [value, setValue] = useState('');
-  const textareaRef = useRef<any>(null);
+  const [newCommentValue, setNewCommentValue] = useState('');
+  const [editingComment, setEditingComment] = useState<{
+    id: number;
+    content: string;
+  } | null>(null);
+  const newCommentTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const editCommentTextareaRef = useRef<HTMLTextAreaElement>(null);
   const { user } = useSelector((state: RootState) => state.auth);
-  const { data, refetch } = useGetCommentsQuery(post.id);
+  const { data, refetch: refetchComments } = useGetCommentsQuery(post.id);
   const [submitComment] = useSubmitCommentMutation();
+  const [updateComment] = useUpdateCommentMutation();
+  const [deleteComment] = useDeleteCommentMutation();
   const dispatch = useDispatch();
 
   useEffect(() => {
     setComments(data);
   }, [data]);
 
-  const handleChange = (e: any) => {
-    setValue(e.target.value);
+  const handleNewCommentChange = (
+    e: React.ChangeEvent<HTMLTextAreaElement>
+  ) => {
+    setNewCommentValue(e.target.value);
+    adjustTextareaHeight(e.target);
+  };
 
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+  const handleEditCommentChange = (
+    e: React.ChangeEvent<HTMLTextAreaElement>
+  ) => {
+    setEditingComment((prev) =>
+      prev ? { ...prev, content: e.target.value } : null
+    );
+    adjustTextareaHeight(e.target);
+  };
+
+  const adjustTextareaHeight = (textarea: HTMLTextAreaElement) => {
+    textarea.style.height = 'auto';
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  };
+
+  const handleSubmitNewComment = async () => {
+    if (!user) {
+      dispatch(requireAuth());
+    } else if (newCommentValue) {
+      await submitComment({ postId: post.id, content: newCommentValue });
+      updateTotalComment(+1);
+      refetchComments();
+      setNewCommentValue('');
     }
   };
 
-  const handleSubmitComment = async () => {
+  const handleSubmitEditComment = async () => {
+    if (editingComment) {
+      await updateComment({
+        postId: post.id,
+        commentId: editingComment.id,
+        content: editingComment.content,
+      });
+      refetchComments();
+      setEditingComment(null);
+    }
+  };
+
+  const handleCommentActions = async (key: string, comment: CommentT) => {
     if (!user) {
       dispatch(requireAuth());
-    } else if (value) {
-      setComments([
-        { id: Math.random(), content: value, user, feed: post },
-        ...(comments ?? []),
-      ]);
-      submitComment({ postId: post.id, content: value }).then(() => {
-        refetch();
-      });
-      setValue('');
+      return;
+    }
+    if (key === 'edit_comment') {
+      setEditingComment({ id: comment.id, content: comment.content });
+      setTimeout(() => {
+        if (editCommentTextareaRef.current) {
+          editCommentTextareaRef.current.focus();
+          // Move the cursor at the end of the content
+          editCommentTextareaRef.current.setSelectionRange(
+            editCommentTextareaRef.current.value.length,
+            editCommentTextareaRef.current.value.length
+          );
+          adjustTextareaHeight(editCommentTextareaRef.current);
+        }
+      }, 0);
+    } else if (key === 'delete_comment') {
+      await deleteComment({ postId: post.id, commentId: comment.id });
+      updateTotalComment(-1);
+      refetchComments();
     }
   };
 
@@ -65,10 +126,69 @@ export default function CommentBox({ className, post }: CommentBoxProps) {
                   />
 
                   <div className="bg-gray-100 px-2.5 py-1.5 rounded-lg">
-                    <h6 className="font-medium">
-                      {getUserFullName(comment.user)}
-                    </h6>
-                    <p>{comment.content}</p>
+                    <div className="flex justify-between">
+                      <h6 className="font-medium">
+                        {getUserFullName(comment.user)}
+                      </h6>
+                      <Dropdown
+                        trigger={['click']}
+                        placement="bottomRight"
+                        overlayStyle={{ paddingTop: 10, width: 160 }}
+                        menu={{
+                          items: [
+                            ...(user?.id === comment?.user?.id
+                              ? [
+                                {
+                                  label: 'Edit Comment',
+                                  key: 'edit_comment',
+                                  icon: <CiEdit size={15} />,
+                                },
+                                {
+                                  label: 'Delete Comment',
+                                  key: 'delete_comment',
+                                  icon: <MdDeleteOutline size={15} />,
+                                },
+                              ]
+                              : []),
+                            {
+                              label: <span>Report Comment</span>,
+                              key: 'report_comment',
+                              icon: <MdOutlineReport size={15} />,
+                              danger: true,
+                            },
+                          ],
+                          onClick: ({ key }) =>
+                            handleCommentActions(key, comment),
+                        }}
+                      >
+                        <button className="hover:bg-gray-200 p-1 rounded-md duration-300 ease-in-out focus:bg-gray-200">
+                          <BsThreeDotsVertical className="text-xs text-neutral-500" />
+                        </button>
+                      </Dropdown>
+                    </div>
+                    {editingComment?.id === comment.id ? (
+                      <div className="w-full relative mt-2">
+                        <textarea
+                          ref={editCommentTextareaRef}
+                          value={editingComment.content}
+                          onChange={handleEditCommentChange}
+                          className="block p-2.5 w-full text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-200 focus:border-gray-300"
+                          placeholder="Edit comment"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              handleSubmitEditComment();
+                            }
+                          }}
+                        />
+                        <IoSend
+                          className="absolute bottom-[12px] right-2 -rotate-45 text-[17px] text-gray-400 cursor-pointer"
+                          onClick={handleSubmitEditComment}
+                        />
+                      </div>
+                    ) : (
+                      <p>{comment.content}</p>
+                    )}
                   </div>
                 </div>
               ))}
@@ -88,21 +208,21 @@ export default function CommentBox({ className, post }: CommentBoxProps) {
 
         <div className="w-full relative">
           <textarea
-            ref={textareaRef}
-            value={value}
-            onChange={handleChange}
+            ref={newCommentTextareaRef}
+            value={newCommentValue}
+            onChange={handleNewCommentChange}
             className="block p-2.5 w-full text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-200 focus:border-gray-300"
             placeholder={`Comment as ${getUserFullName(user)}`}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                handleSubmitComment();
+                handleSubmitNewComment();
               }
             }}
           />
           <IoSend
             className="absolute bottom-[12px] right-2 -rotate-45 text-[17px] text-gray-400 cursor-pointer"
-            onClick={handleSubmitComment}
+            onClick={handleSubmitNewComment}
           />
         </div>
       </div>
